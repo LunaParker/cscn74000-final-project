@@ -1,5 +1,5 @@
 #include <iostream>
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
