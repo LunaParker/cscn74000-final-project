@@ -21,25 +21,65 @@ else()
     set(PLATFORM_SOCKET_LIBS "")
 endif()
 
-# Source Files which will be compiled
-set(SOURCES
-        src/main.cpp
+# Shared common library (ats_common)
+# Code shared between the client and server: packet structures,
+# protocol logic, logging utilities, etc.
+set(COMMON_SOURCES
+        src/common/packets.cpp
+        src/common/logging.cpp
 )
 
-# Source Headers for discovery/linkage
-set(HEADERS
-        src/main.h
+set(COMMON_HEADERS
+        src/common/packets.h
+        src/common/logging.h
 )
 
-# Build the main executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_library(ats_common STATIC ${COMMON_SOURCES} ${COMMON_HEADERS})
 
-target_include_directories(${PROJECT_NAME} PRIVATE
+target_include_directories(ats_common PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_link_libraries(ats_common PUBLIC
         ${PLATFORM_SOCKET_LIBS}
+)
+
+# Server executable (ats_server)
+set(SERVER_SOURCES
+        src/server/main.cpp
+)
+
+set(SERVER_HEADERS
+        src/server/main.h
+)
+
+add_executable(ats_server ${SERVER_SOURCES} ${SERVER_HEADERS})
+
+target_include_directories(ats_server PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/server
+)
+
+target_link_libraries(ats_server PRIVATE
+        ats_common
+)
+
+# Client executable (ats_client)
+set(CLIENT_SOURCES
+        src/client/main.cpp
+)
+
+set(CLIENT_HEADERS
+        src/client/main.h
+)
+
+add_executable(ats_client ${CLIENT_SOURCES} ${CLIENT_HEADERS})
+
+target_include_directories(ats_client PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+)
+
+target_link_libraries(ats_client PRIVATE
+        ats_common
 )
 
 # Googletest Framework
@@ -61,22 +101,25 @@ enable_testing()
 
 # Add test source files to this list as you create them.
 set(TEST_SOURCES
-        tests/test_main.cpp
+        tests/test_packets.cpp
+        tests/test_logging.cpp
+        tests/test_server.cpp
+        tests/test_client.cpp
 )
 
-add_executable(${PROJECT_NAME}_tests ${TEST_SOURCES})
+add_executable(ats_tests ${TEST_SOURCES})
 
-target_include_directories(${PROJECT_NAME}_tests PRIVATE
+target_include_directories(ats_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(${PROJECT_NAME}_tests PRIVATE
+target_link_libraries(ats_tests PRIVATE
         GTest::gtest_main
-        ${PLATFORM_SOCKET_LIBS}
+        ats_common
 )
 
 include(GoogleTest)
-gtest_discover_tests(${PROJECT_NAME}_tests)
+gtest_discover_tests(ats_tests)
 
 # PVS-Studio MISRA Compliance Checker
 # Provides a build target for running MISRA compliance checks.
@@ -95,7 +138,7 @@ if(ENABLE_PVS_STUDIO)
     pvs_studio_add_target(
             TARGET pvs_analysis
             ALL
-            ANALYZE ${PROJECT_NAME}
+            ANALYZE ats_common ats_server ats_client
             MODE MISRA:1,2,3
             LOG "${CMAKE_BINARY_DIR}/pvs-report.log"
             FORMAT fullhtml

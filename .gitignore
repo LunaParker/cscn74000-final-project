@@ -53,5 +53,12 @@ Thumbs.db
 Desktop.ini
 
 ### Testing ###
+# Googletest
 googletest-*/
 Testing/
+
+# PVS-Studio
+*.PVS-Studio*
+pvs-report/
+pvs-report.log
+*.plog
