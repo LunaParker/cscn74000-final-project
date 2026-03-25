@@ -140,9 +140,8 @@ if(ENABLE_PVS_STUDIO)
             ALL
             ANALYZE ats_common ats_server ats_client
             MODE MISRA:1,2,3
-            LOG "${CMAKE_BINARY_DIR}/pvs-report.log"
             FORMAT fullhtml
-            OUTPUT "${CMAKE_BINARY_DIR}/pvs-report"
-            CFG "${CMAKE_SOURCE_DIR}/pvs-studio.cfg"
+            LOG "${CMAKE_BINARY_DIR}/pvs-report" # This will be the output directory for 'fullhtml'
+            CONFIG "${CMAKE_SOURCE_DIR}/pvs-studio.cfg"
     )
 endif()
