@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 4.1)
 project(AircraftTrackingSystem)
 
+# Clang-tidy integration/enforcement
+find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+
+if(CLANG_TIDY_EXE)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+endif()
+
 # Sets minimum C++ version
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
