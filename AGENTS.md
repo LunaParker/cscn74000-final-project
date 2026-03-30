@@ -23,6 +23,8 @@ Mock surface-to-air 1:many ATS in C++20. Simulates aircraft sending GPS coordina
 ## Conventions
 
 - C++20. Must build on both Windows and POSIX.
+- No third-party libraries except for testing (Googletest) and static analysis (PVS-Studio).
+- Header file guards should use `#ifndef` with the format `CSCN74000_PROJECT_[SCOPE]_[FILENAME]_H`, unless it is a common library header, in which case, it is `CSCN74000_PROJECT_[FILENAME]_H`. Example: `CSCN74000_PROJECT_SERVER_MAIN_H`.
 - Networking code uses `#ifdef` for platform-specific headers and socket APIs.
 - Google clang-format and clang-tidy style. All code must pass both before merge.
 - Tests use Googletest.

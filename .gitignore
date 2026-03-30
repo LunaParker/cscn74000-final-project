@@ -62,3 +62,6 @@ Testing/
 pvs-report/
 pvs-report.log
 *.plog
+
+# Claude
+.claude/
