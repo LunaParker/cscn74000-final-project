@@ -1,6 +1,8 @@
 #include "logging.h"
 #include <chrono>
 #include <iomanip>
+#include <sstream>
+#include <ctime>
 
 Logger::Logger() {
     openDailyFile();
@@ -23,7 +25,7 @@ void Logger::openDailyFile() {
     logFile.open(ss.str(), std::ios::app);
 }
 
-void Logger::logEvent(const std::string& sender, const std::string& direction, const std::string& message) {
+void Logger::logEvent(const std::string &sender, const std::string &direction, const std::string &message) {
     if (logFile.is_open()) {
         auto now = std::chrono::system_clock::now();
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
