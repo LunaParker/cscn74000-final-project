@@ -32,6 +32,6 @@ void Logger::logEvent(const std::string& sender, const std::string& direction, c
         logFile << "[" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << "] "
                 << "Dir: " << direction << " | "
                 << "From: " << sender << " | "
-                << "Data: " << message << std::endl;
+                << "Data: " << message << '\n';
     }
 }
