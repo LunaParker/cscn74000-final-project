@@ -1,7 +1,6 @@
 #include "logging.h"
 #include <chrono>
 #include <iomanip>
-#include <iostream>
 
 Logger::Logger() {
     openDailyFile();
