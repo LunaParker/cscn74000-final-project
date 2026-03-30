@@ -28,7 +28,7 @@ void Logger::logEvent(const std::string& sender, const std::string& direction, c
         auto now = std::chrono::system_clock::now();
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
 
-        // Required fields: Timestamp, Direction, Sender [cite: 6]
+        // Required fields for logging: Timestamp, Direction, Sender
         logFile << "[" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << "] "
                 << "Dir: " << direction << " | "
                 << "From: " << sender << " | "
