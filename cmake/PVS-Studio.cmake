@@ -568,6 +568,7 @@ function (pvs_studio_add_target)
         
           list(APPEND PVS_STUDIO_PLOGS ${PVS_STUDIO_PLOGS_LOGS})
           list(LENGTH PVS_STUDIO_PLOGS END)
+          list(APPEND COMMANDS COMMAND "${CMAKE_COMMAND}" -E remove_directory "${PVS_STUDIO_LOG}")
           list(APPEND COMMANDS COMMAND "${CMAKE_COMMAND}" -E remove -f "${PVS_STUDIO_LOG}")
 
           while(BEGIN LESS END)
@@ -595,10 +596,12 @@ function (pvs_studio_add_target)
             endif()
 
             list(APPEND COMMANDS
+                 COMMAND "${CMAKE_COMMAND}" -E remove_directory "${PVS_STUDIO_LOG}.pvs.raw"
                  COMMAND "${CMAKE_COMMAND}" -E remove -f "${PVS_STUDIO_LOG}.pvs.raw"
                  COMMAND "${CMAKE_COMMAND}" -E rename "${PVS_STUDIO_LOG}" "${PVS_STUDIO_LOG}.pvs.raw"
                  COMMAND "${PVS_STUDIO_CONVERTER}" "${PVS_STUDIO_CONVERTER_ARGS}" -t "${PVS_STUDIO_FORMAT}" "${PVS_STUDIO_LOG}.pvs.raw" -o "${PVS_STUDIO_LOG}")
             if (NOT PVS_STUDIO_KEEP_COMBINED_PLOG)
+                list(APPEND COMMANDS COMMAND "${CMAKE_COMMAND}" -E remove_directory "${PVS_STUDIO_LOG}.pvs.raw")
                 list(APPEND COMMANDS COMMAND "${CMAKE_COMMAND}" -E remove -f "${PVS_STUDIO_LOG}.pvs.raw")
             endif()
         endif()

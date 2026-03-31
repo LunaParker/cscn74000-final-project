@@ -99,45 +99,50 @@ uint16_t getPort() {
 // Socket creation
 // ---------------------------------------------------------------------------
 
+/// Sets SO_REUSEADDR, binds to the given port, and begins listening.
+/// Returns true on success, false if any step fails.
+static bool configureListenSocket(SocketHandle sock, uint16_t port) {
+    int opt = 1;
+    bool success = false;
+
+    // setsockopt signature differs between platforms:
+    //   Windows: const char*   for optval
+    //   POSIX:   const void*   for optval
+#ifdef _WIN32
+    const int optResult = setsockopt(
+        sock, SOL_SOCKET, SO_REUSEADDR,
+        reinterpret_cast<const char *>(&opt), sizeof(opt));
+#else
+    const int optResult = setsockopt(
+        sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#endif
+
+    if (optResult == 0) {
+        struct sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(port);
+
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required by bind() API
+        const int bindResult = bind(
+            sock, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
+
+        if (bindResult == 0) {
+            success = (listen(sock, SOMAXCONN) == 0);
+        }
+    }
+
+    return success;
+}
+
 SocketHandle createListenSocket(uint16_t port) {
     SocketHandle result = INVALID_SOCK;
     SocketHandle sock = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sock != INVALID_SOCK) {
-        int opt = 1;
-
-        // setsockopt signature differs between platforms:
-        //   Windows: const char*   for optval
-        //   POSIX:   const void*   for optval
-#ifdef _WIN32
-        const int optResult = setsockopt(
-            sock, SOL_SOCKET, SO_REUSEADDR,
-            reinterpret_cast<const char *>(&opt), sizeof(opt));
-#else
-        const int optResult = setsockopt(
-            sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#endif
-
-        if (optResult == 0) {
-            struct sockaddr_in addr{};
-            addr.sin_family = AF_INET;
-            addr.sin_addr.s_addr = INADDR_ANY;
-            addr.sin_port = htons(port);
-
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required by bind() API
-            const int bindResult = bind(
-                sock, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
-
-            if (bindResult == 0) {
-                const int listenResult = listen(sock, SOMAXCONN);
-                if (listenResult == 0) {
-                    result = sock;
-                }
-            }
-        }
-
-        // If any step after socket() failed, close the partially-set-up socket.
-        if (result == INVALID_SOCK) {
+        if (configureListenSocket(sock, port)) {
+            result = sock;
+        } else {
             closeSocket(sock);
         }
     }
@@ -252,6 +257,34 @@ const char *connectionStateName(ConnectionState state) {
 // Client handling
 // ---------------------------------------------------------------------------
 
+/// Constructs and sends a VerifyResponse packet to the client.
+/// Returns true if both the header and payload were sent successfully.
+static bool sendVerifyResponse(SocketHandle client, uint32_t accepted) {
+    PacketHeader responseHeader{};
+    responseHeader.aircraftId = 0;
+    responseHeader.packetType = PacketType::VERIFY;
+    responseHeader.payloadSize = sizeof(VerifyResponse);
+
+    VerifyResponse response{};
+    response.accepted = accepted;
+    response.protocolVersion = ATS_PROTOCOL_VERSION;
+
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to send raw struct bytes
+    const bool hdrSent = sendAll(
+        client, reinterpret_cast<const char *>(&responseHeader),
+        sizeof(responseHeader));
+
+    bool bodySent = false;
+    if (hdrSent) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to send raw struct bytes
+        bodySent = sendAll(
+            client, reinterpret_cast<const char *>(&response),
+            sizeof(response));
+    }
+
+    return bodySent;
+}
+
 ConnectionState handleVerify(SocketHandle client, Logger &logger) {
     ConnectionState result = ConnectionState::DISCONNECTED;
 
@@ -283,30 +316,13 @@ ConnectionState handleVerify(SocketHandle client, Logger &logger) {
                     (verifyData.protocolVersion == ATS_PROTOCOL_VERSION)
                     ? 1U : 0U;
 
-                PacketHeader responseHeader{};
-                responseHeader.aircraftId = 0;
-                responseHeader.packetType = PacketType::VERIFY;
-                responseHeader.payloadSize = sizeof(VerifyResponse);
+                const bool sent = sendVerifyResponse(client, accepted);
 
-                VerifyResponse response{};
-                response.accepted = accepted;
-                response.protocolVersion = ATS_PROTOCOL_VERSION;
-
-                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to send raw struct bytes
-                const bool hdrSent = sendAll(
-                    client, reinterpret_cast<const char *>(&responseHeader),
-                    sizeof(responseHeader));
-
-                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to send raw struct bytes
-                const bool bodySent = hdrSent && sendAll(
-                    client, reinterpret_cast<const char *>(&response),
-                    sizeof(response));
-
-                if (bodySent && (accepted == 1U)) {
+                if (sent && (accepted == 1U)) {
                     logger.logEvent(sender, "STATE",
                                     "VERIFY handshake accepted");
                     result = ConnectionState::RECEIVING;
-                } else if (bodySent) {
+                } else if (sent) {
                     logger.logEvent(sender, "STATE",
                                     "VERIFY handshake rejected: "
                                     "protocol version mismatch");
@@ -380,7 +396,7 @@ static bool processPacket(SocketHandle client, const PacketHeader &header,
 }
 
 ConnectionState handleReceiving(SocketHandle client, Logger &logger) {
-    ConnectionState result = ConnectionState::DISCONNECTED;
+    const ConnectionState result = ConnectionState::DISCONNECTED;
     bool active = true;
 
     while (active && isRunning()) {
