@@ -83,7 +83,6 @@ set(CLIENT_SOURCES
 
 set(CLIENT_HEADERS
         src/client/main.h
-        src/client/entry.cpp
 )
 
 add_library(ats_client_lib STATIC ${CLIENT_SOURCES} ${CLIENT_HEADERS})
