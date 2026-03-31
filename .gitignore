@@ -3,6 +3,8 @@
 build/
 cmake-build-*/
 out/
+build_output.log
+**_log.txt
 
 # CMake Generated Files
 CMakeCache.txt

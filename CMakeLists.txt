@@ -60,14 +60,20 @@ set(SERVER_HEADERS
         src/server/main.h
 )
 
-add_executable(ats_server ${SERVER_SOURCES} ${SERVER_HEADERS})
+add_library(ats_server_lib STATIC ${SERVER_SOURCES} ${SERVER_HEADERS})
+target_include_directories(ats_server_lib PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/server
+)
+target_link_libraries(ats_server_lib PUBLIC
+        ats_common
+)
 
+add_executable(ats_server src/server/entry.cpp)
 target_include_directories(ats_server PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/server
 )
-
 target_link_libraries(ats_server PRIVATE
-        ats_common
+        ats_server_lib
 )
 
 # Client executable (ats_client)
@@ -77,16 +83,23 @@ set(CLIENT_SOURCES
 
 set(CLIENT_HEADERS
         src/client/main.h
+        src/client/entry.cpp
 )
 
-add_executable(ats_client ${CLIENT_SOURCES} ${CLIENT_HEADERS})
+add_library(ats_client_lib STATIC ${CLIENT_SOURCES} ${CLIENT_HEADERS})
+target_include_directories(ats_client_lib PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+)
+target_link_libraries(ats_client_lib PUBLIC
+        ats_common
+)
 
+add_executable(ats_client src/client/entry.cpp)
 target_include_directories(ats_client PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/client
 )
-
 target_link_libraries(ats_client PRIVATE
-        ats_common
+        ats_client_lib
 )
 
 # Googletest Framework
@@ -123,6 +136,8 @@ target_include_directories(ats_tests PRIVATE
 target_link_libraries(ats_tests PRIVATE
         GTest::gtest_main
         ats_common
+        ats_server_lib
+        ats_client_lib
 )
 
 include(GoogleTest)
@@ -145,7 +160,7 @@ if(ENABLE_PVS_STUDIO)
     pvs_studio_add_target(
             TARGET pvs_analysis
             ALL
-            ANALYZE ats_common ats_server ats_client
+            ANALYZE ats_common ats_server_lib ats_client_lib ats_server ats_client
             MODE MISRA:1,2,3
             FORMAT fullhtml
             LOG "${CMAKE_BINARY_DIR}/pvs-report" # This will be the output directory for 'fullhtml'
