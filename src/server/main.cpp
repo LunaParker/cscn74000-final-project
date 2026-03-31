@@ -13,6 +13,7 @@
 #include "main.h"
 
 #include <array>
+#include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -150,6 +151,25 @@ SocketHandle createListenSocket(uint16_t port) {
     return result;
 }
 
+/// Wait up to one second for a pending client so SIGINT can be observed.
+static int waitForClient(SocketHandle listenSock) {
+    fd_set readSet;
+    FD_ZERO(&readSet);
+    FD_SET(listenSock, &readSet);
+
+    struct timeval timeout{};
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+#ifdef _WIN32
+    const int ready = select(0, &readSet, nullptr, nullptr, &timeout);
+#else
+    const int ready = select(listenSock + 1, &readSet, nullptr, nullptr, &timeout);
+#endif
+
+    return ready;
+}
+
 // ---------------------------------------------------------------------------
 // Reliable receive
 // ---------------------------------------------------------------------------
@@ -259,9 +279,10 @@ const char *connectionStateName(ConnectionState state) {
 
 /// Constructs and sends a VerifyResponse packet to the client.
 /// Returns true if both the header and payload were sent successfully.
-static bool sendVerifyResponse(SocketHandle client, uint32_t accepted) {
+static bool sendVerifyResponse(SocketHandle client, int32_t aircraftId,
+                               uint32_t accepted) {
     PacketHeader responseHeader{};
-    responseHeader.aircraftId = 0;
+    responseHeader.aircraftId = aircraftId;
     responseHeader.packetType = PacketType::VERIFY;
     responseHeader.payloadSize = sizeof(VerifyResponse);
 
@@ -269,17 +290,16 @@ static bool sendVerifyResponse(SocketHandle client, uint32_t accepted) {
     response.accepted = accepted;
     response.protocolVersion = ATS_PROTOCOL_VERSION;
 
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to send raw struct bytes
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — send() requires byte pointer
     const bool hdrSent = sendAll(
         client, reinterpret_cast<const char *>(&responseHeader),
         sizeof(responseHeader));
 
     bool bodySent = false;
     if (hdrSent) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to send raw struct bytes
-        bodySent = sendAll(
-            client, reinterpret_cast<const char *>(&response),
-            sizeof(response));
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — send() requires byte pointer
+        bodySent = sendAll(client, reinterpret_cast<const char *>(&response),
+                           sizeof(response));
     }
 
     return bodySent;
@@ -289,9 +309,9 @@ ConnectionState handleVerify(SocketHandle client, Logger &logger) {
     ConnectionState result = ConnectionState::DISCONNECTED;
 
     PacketHeader header{};
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to read raw struct bytes
-    const bool headerOk = recvAll(
-        client, reinterpret_cast<char *>(&header), sizeof(header));
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — recv() requires byte pointer
+    const bool headerOk = recvAll(client, reinterpret_cast<char *>(&header),
+                                  sizeof(header));
 
     if (headerOk) {
         const std::string sender =
@@ -306,26 +326,46 @@ ConnectionState handleVerify(SocketHandle client, Logger &logger) {
                             "VERIFY payload size mismatch");
         } else {
             VerifyPayload verifyData{};
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to read raw struct bytes
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — recv() requires byte pointer
             const bool payloadOk = recvAll(
                 client, reinterpret_cast<char *>(&verifyData),
                 sizeof(verifyData));
 
             if (payloadOk) {
-                const uint32_t accepted =
-                    (verifyData.protocolVersion == ATS_PROTOCOL_VERSION)
-                    ? 1U : 0U;
+                uint32_t accepted = 0U;
+                bool aircraftIdMismatch = false;
+                bool protocolMismatch = false;
 
-                const bool sent = sendVerifyResponse(client, accepted);
+                if (verifyData.aircraftId != header.aircraftId) {
+                    aircraftIdMismatch = true;
+                    logger.logEvent(sender, "ERROR",
+                                    "VERIFY aircraftId mismatch");
+                } else if (verifyData.protocolVersion == ATS_PROTOCOL_VERSION) {
+                    accepted = 1U;
+                } else {
+                    protocolMismatch = true;
+                }
+
+                const bool sent = sendVerifyResponse(client, header.aircraftId,
+                                                     accepted);
 
                 if (sent && (accepted == 1U)) {
                     logger.logEvent(sender, "STATE",
                                     "VERIFY handshake accepted");
                     result = ConnectionState::RECEIVING;
                 } else if (sent) {
-                    logger.logEvent(sender, "STATE",
-                                    "VERIFY handshake rejected: "
-                                    "protocol version mismatch");
+                    if (aircraftIdMismatch) {
+                        logger.logEvent(sender, "STATE",
+                                        "VERIFY handshake rejected: "
+                                        "aircraftId mismatch");
+                    } else if (protocolMismatch) {
+                        logger.logEvent(sender, "STATE",
+                                        "VERIFY handshake rejected: "
+                                        "protocol version mismatch");
+                    } else {
+                        logger.logEvent(sender, "STATE",
+                                        "VERIFY handshake rejected");
+                    }
                 } else {
                     // Send failed — result remains DISCONNECTED
                 }
@@ -351,7 +391,7 @@ static bool processPacket(SocketHandle client, const PacketHeader &header,
     } else if ((header.packetType == PacketType::TELEMETRY) &&
                (header.payloadSize == sizeof(TelemetryPayload))) {
         TelemetryPayload telemetry{};
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to read raw struct bytes
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — recv() requires byte pointer
         const bool payloadOk = recvAll(
             client, reinterpret_cast<char *>(&telemetry),
             sizeof(telemetry));
@@ -401,7 +441,7 @@ ConnectionState handleReceiving(SocketHandle client, Logger &logger) {
 
     while (active && isRunning()) {
         PacketHeader header{};
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — required to read raw struct bytes
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — recv() requires byte pointer
         const bool headerOk = recvAll(
             client, reinterpret_cast<char *>(&header), sizeof(header));
 
@@ -451,9 +491,25 @@ int runServer() {
             std::cout << "ATS server listening on port " << port << '\n';
 
             while (isRunning()) {
-                SocketHandle client = accept(listenSock, nullptr, nullptr);
-                if (client != INVALID_SOCK) {
-                    handleClient(client, logger);
+                const int ready = waitForClient(listenSock);
+
+                if (ready > 0) {
+                    SocketHandle client = accept(listenSock, nullptr, nullptr);
+                    if (client != INVALID_SOCK) {
+                        handleClient(client, logger);
+                    }
+                } else if (ready < 0) {
+#ifdef _WIN32
+                    std::cerr << "accept wait failed.\n";
+                    break;
+#else
+                    if (errno != EINTR) {
+                        std::cerr << "accept wait failed.\n";
+                        break;
+                    }
+#endif
+                } else {
+                    // Timeout: loop again so shutdownFlag can be re-checked.
                 }
             }
 
