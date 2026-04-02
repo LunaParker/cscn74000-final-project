@@ -5,7 +5,7 @@
 #include <ctime>
 
 Logger::Logger() {
-    openDailyFile();
+    openLogFile();
 }
 
 Logger::~Logger() {
@@ -14,26 +14,46 @@ Logger::~Logger() {
     }
 }
 
-void Logger::openDailyFile() {
+void Logger::openLogFile() {
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
 
     std::stringstream ss;
-    // Format: YYYY-MM-DD_log.txt for traceability
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d") << "_log.txt";
-
-    logFile.open(ss.str(), std::ios::app);
+    // Log filename format: YYYY-MM-DD_HH-MM-SS_log.txt
+    ss << std::put_time(std::gmtime(&in_time_t), "%Y-%m-%d_%H-%M-%S") << "_UTC_log.txt";
+    logFile.open(ss.str(), std::ios::out);
 }
 
-void Logger::logEvent(const std::string &sender, const std::string &direction, const std::string &message) {
+void Logger::logEvent(const std::string& event) {
     if (logFile.is_open()) {
         auto now = std::chrono::system_clock::now();
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
 
-        // Required fields for logging: Timestamp, Direction, Sender
-        logFile << "[" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << "] "
-                << "Dir: " << direction << " | "
-                << "From: " << sender << " | "
-                << "Data: " << message << '\n';
+        logFile << "["
+                << std::put_time(std::gmtime(&in_time_t), "%Y-%m-%d %H:%M:%S UTC")
+                << "] "
+                << event
+                << '\n';
     }
 }
+
+void Logger::logPacket(const std::string& sender,
+                       const std::string& direction,
+                       PacketType packetType,
+                       uint32_t payloadSize,
+                       uint32_t checksum,
+                       const std::string& extra) {
+    std::stringstream ss;
+    ss << "Sender: " << sender
+       << " | Direction: " << direction
+       << " | Packet Type: " << packetTypeToString(packetType)
+       << " | Payload Size: " << payloadSize
+       << " | Checksum: " << checksum;
+
+    if (!extra.empty()) {
+        ss << " | " << extra;
+    }
+
+    logEvent(ss.str());
+}
+

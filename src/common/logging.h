@@ -4,6 +4,8 @@
 #include <string>
 #include <fstream>
 
+#include "packets.h"
+
 class Logger {
 public:
     Logger();
@@ -14,15 +16,31 @@ public:
     Logger& operator=(const Logger&) = delete;
 
     /**
-     * @brief Logs a communication event.
-     * @param sender The ID or name of the sender.
-     * @param direction "INCOMING" or "OUTGOING".
-     * @param message The content or packet type description.
+     * @brief Logs a system event with a timestamp.
+     * @param event Description of the event.
      */
-    void logEvent(const std::string& sender, const std::string& direction, const std::string& message);
+    void logEvent(const std::string& event);
 
-    private:
-        std::ofstream logFile;
-        void openDailyFile(); // Creates file using the current date
+    /**
+     * @brief Logs a sent or received packet.
+     * @param sender The ID or name of the sender.
+     * @param direction "RX" or "TX".
+     * @param packetType The packet type.
+     * @param payloadSize The size of the packet in bytes.
+     * @param checksum The packet checksum.
+     * @param extra Optional extra metadata or content.
+     */
+    void logPacket(const std::string& sender,
+                   const std::string& direction,
+                   PacketType packetType,
+                   uint32_t payloadSize,
+                   uint32_t checksum,
+                   const std::string& extra = "");
+
+private:
+    std::ofstream logFile;
+    void openLogFile(); // Creates timestamped log file
 };
+
 #endif
+
