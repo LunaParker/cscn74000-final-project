@@ -23,6 +23,24 @@ constexpr SocketHandle INVALID_SOCK = -1;
 constexpr uint32_t MAX_PAYLOAD_SIZE = 1024U;
 
 /**
+ * @brief Platform-agnostic socket type aliases.
+ *
+ * Windows uses the SOCKET handle type from Winsock2.
+ * POSIX systems use a plain int file descriptor.
+ */
+#ifdef _WIN32
+#include <winsock2.h>
+using SocketHandle = SOCKET;
+const SocketHandle INVALID_SOCK = INVALID_SOCKET;
+#else
+using SocketHandle = int;
+constexpr SocketHandle INVALID_SOCK = -1;
+#endif
+
+/// Maximum payload size in bytes for any single packet.
+constexpr uint32_t MAX_PAYLOAD_SIZE = 1024U;
+
+/**
  * @brief Enumeration of supported packet types
  */
 
@@ -67,6 +85,22 @@ struct TelemetryPayload {
     double latitude;
     double longitude;
     double altitude;
+};
+
+/**
+ * @brief Payload sent by the client during the VERIFY handshake.
+ */
+struct VerifyPayload {
+    int32_t  aircraftId;
+    uint32_t protocolVersion;
+};
+
+/**
+ * @brief Response sent by the server during the VERIFY handshake.
+ */
+struct VerifyResponse {
+    uint32_t accepted;
+    uint32_t protocolVersion;
 };
 
 /**

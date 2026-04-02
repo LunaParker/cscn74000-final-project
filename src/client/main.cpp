@@ -11,7 +11,3 @@
 #include "common/logging.h"
 #include "common/packets.h"
 #include "main.h"
-
-int main() {
-    return 0;
-}
